@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Co-Op Mission: BaseTeam</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #0b0f19;
+            color: #f0f6fc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            width: 700px;
+            background: #161b22;
+            border: 2px solid #30363d;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+        h1 { margin-top: 0; color: #58a6ff; font-size: 26px; }
+        p { color: #8b949e; font-size: 14px; }
+        
+        /* Progress Bar */
+        .progress-box {
+            background: #21262d;
+            border-radius: 8px;
+            height: 25px;
+            width: 100%;
+            margin: 20px 0;
+            overflow: hidden;
+            border: 1px solid #30363d;
+            position: relative;
+        }
+        #progress-fill {
+            background: linear-gradient(90deg, #238636, #2ea043);
+            height: 100%;
+            width: 0%;
+            transition: width 0.05s ease-out;
+        }
+        #progress-text {
+            position: absolute;
+            width: 100%;
+            top: 3px;
+            left: 0;
+            font-size: 13px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        /* Click Button */
+        #action-btn {
+            background: #238636;
+            color: white;
+            border: none;
+            padding: 20px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(35, 134, 54, 0.4);
+            transition: transform 0.05s, background 0.2s;
+            margin: 15px 0;
+        }
+        #action-btn:hover { background: #2ea043; }
+        #action-btn:active { transform: scale(0.95); }
+
+        /* Stats & Link Sharing */
+        .stats-grid {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            background: #0d1117;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+        }
+        .stat-item span { color: #f0f6fc; font-weight: bold; font-size: 18px; display: block; margin-top: 5px; }
+        
+        .share-box {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .share-box input {
+            flex: 1;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #8b949e;
+            padding: 10px;
+            font-size: 13px;
+        }
+        .share-box button {
+            background: #1f6feb;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .share-box button:hover { background: #388bfd; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🚀 BaseTeam: Live Co-Op Mission</h1>
+        <p id="sub-title">Connecting to live cloud mission server...</p>
+
+        <!-- Progress bar -->
+        <div class="progress-box">
+            <div id="progress-fill"></div>
+            <div id="progress-text">Loading Progress...</div>
+        </div>
+
+        <!-- Big Clicker Button -->
+        <button id="action-btn" onclick="contributeWork()">⚡ HARVEST / BUILD (+1)</button>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-item">Your Contribution <span id="my-clicks">0</span></div>
+            <div class="stat-item">Total Global Score <span id="total-score">0</span></div>
+            <div class="stat-item">Mission Status <span id="status-label" style="color: #2ea043;">Live</span></div>
+        </div>
+
+        <!-- Link Sharing -->
+        <div class="share-box">
+            <input type="text" id="invite-link" readonly value="Generating link...">
+            <button onclick="copyLink()">Copy Invite Link</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Imports (Modular v10 CDN) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // 🔥 PASTE YOUR FIREBASE CONFIGURATION HERE:
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const targetScore = 5000; // Goal of the mission
+        let myClicks = 0;
+
+        // Reference to our global score in Firebase Realtime Database
+        const scoreRef = ref(db, 'missions/baseteam/totalScore');
+
+        // Set up live listener: whenever ANYONE clicks, it updates instantly
+        onValue(scoreRef, (snapshot) => {
+            const currentTotal = snapshot.val() || 0;
+            updateUI(currentTotal);
+        });
+
+        // Function triggered when user clicks the button
+        window.contributeWork = function() {
+            runTransaction(scoreRef, (currentScore) => {
+                const score = currentScore || 0;
+                if (score >= targetScore) return; 
+                return score + 1;
+            }).then(() => {
+                myClicks++;
+                document.getElementById('my-clicks').innerText = myClicks;
+            }).catch((error) => {
+                console.error("Transaction failed: ", error);
+            });
+        };
+
+        function updateUI(totalScore) {
+            let percentage = Math.min(100, (totalScore / targetScore) * 100);
+            document.getElementById('progress-fill').style.width = percentage + '%';
+            document.getElementById('progress-text').innerText = `${totalScore.toLocaleString()} / ${targetScore.toLocaleString()} Units Built (${percentage.toFixed(1)}%)`;
+            document.getElementById('total-score').innerText = totalScore.toLocaleString();
+
+            if (totalScore >= targetScore) {
+                document.getElementById('status-label').innerText = "MISSION COMPLETED! 🎉";
+                document.getElementById('action-btn').innerText = "VICTORY ACHIEVED!";
+                document.getElementById('action-btn').style.background = "#8957e5";
+                document.getElementById('action-btn').disabled = true;
+            }
+        }
+
+        // Set up share link
+        document.getElementById('invite-link').value = window.location.href;
+        document.getElementById('sub-title').innerText = "Real-time sync active! Send your link to friends to build together.";
+    </script>
+
+    <script>
+        function copyLink() {
+            const linkInput = document.getElementById('invite-link');
+            linkInput.select();
+            navigator.clipboard.writeText(linkInput.value);
+            alert("Live link copied! Send it to your friends so they can help you build in real time.");
+        }
+    </script>
+</body>
+</html>
